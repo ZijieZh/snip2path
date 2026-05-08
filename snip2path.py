@@ -3,11 +3,13 @@
 
 After screenshot (Win+Shift+S):
   Ctrl+V in terminal/cmd  → pastes image file path
-  Ctrl+V in WeChat/DingTalk → pastes the image itself
+  Ctrl+V in browser (Kimi/ChatGPT) → image only (no path)
+  Ctrl+V in WeChat/DingTalk → image only
 
 How: Windows clipboard supports multiple formats simultaneously.
-  - CF_DIB / CF_DIBV5 / CF_BITMAP → image (WeChat, DingTalk, etc.)
-  - CF_UNICODETEXT               → file path (terminal, text editors)
+  - CF_DIB / CF_DIBV5 / CF_BITMAP → image (WeChat, DingTalk, browsers)
+  - CF_HDROP (file drop list)      → file path (terminal reads, browser ignores)
+  - Foreground window auto-detection → only add path in terminal context
 
 Usage:
   snip2path           # once: save current clipboard image + set multi-format
@@ -26,7 +28,7 @@ from datetime import datetime
 from pathlib import Path
 from PIL import Image, ImageGrab
 
-VERSION = "1.1.1"
+VERSION = "1.2.0"
 DEFAULT_OUTPUT = Path.home() / "Pictures" / "Snip2Path"
 DEFAULT_PREFIX = "snip_"
 
@@ -90,6 +92,7 @@ psapi.GetModuleBaseNameW.restype = ctypes.c_uint32
 
 CF_BITMAP = 2
 CF_DIB = 8
+CF_HDROP = 15
 CF_UNICODETEXT = 13
 CF_DIBV5 = 17
 
@@ -204,11 +207,30 @@ def capture_raw_formats():
     return raw
 
 
-# ── Clipboard multi-format write ─────────────────────────────────────────
-def set_clipboard_multiformat(raw_formats: dict, text: str):
-    """Write bitmap formats + text path to clipboard.
+# ── CF_HDROP (file drop list) builder ────────────────────────────────────
+def make_hdrop(filepath: str) -> bytes:
+    """Build CF_HDROP clipboard data for a single file path.
 
-    Terminal reads CF_UNICODETEXT → path.
+    CF_HDROP is handled differently by each app:
+      - Windows Terminal / mintty → pastes file path as text
+      - Browsers (Kimi, ChatGPT) → IGNORED in text inputs (only reads image)
+      - WeChat / DingTalk → reads CF_DIB/CF_BITMAP, ignores CF_HDROP
+    """
+    import struct
+    path_wide = filepath + "\x00"
+    file_list = path_wide.encode("utf-16-le") + b"\x00\x00"
+
+    # DROPFILES: pFiles(4) + pt(8) + fNC(4) + fWide(4) = 20 bytes
+    dropfiles = struct.pack("<Iiiii", 20, 0, 0, 0, 1)  # fWide=1 (Unicode)
+    return dropfiles + file_list
+
+
+# ── Clipboard multi-format write ─────────────────────────────────────────
+def set_clipboard_multiformat(raw_formats: dict, filepath: str):
+    """Write bitmap formats + CF_HDROP to clipboard.
+
+    Terminal reads CF_HDROP → pastes file path as text.
+    Browsers ignore CF_HDROP in text inputs → image only.
     WeChat/DingTalk reads CF_DIB/CF_BITMAP → image.
     """
     user32.OpenClipboard(0)
@@ -219,19 +241,19 @@ def set_clipboard_multiformat(raw_formats: dict, text: str):
             user32.SetClipboardData(CF_BITMAP, data)
         elif cf in (CF_DIB, CF_DIBV5):
             size = len(data)
-            h = kernel32.GlobalAlloc(0x0002, size)  # GMEM_MOVEABLE
+            h = kernel32.GlobalAlloc(0x0002, size)
             p = kernel32.GlobalLock(h)
             ctypes.memmove(p, data, size)
             kernel32.GlobalUnlock(h)
             user32.SetClipboardData(cf, h)
 
-    # Add text path (UTF-16-LE, null-terminated)
-    encoded = text.encode("utf-16-le") + b"\x00\x00"
-    h_text = kernel32.GlobalAlloc(0x0002, len(encoded))
-    p_text = kernel32.GlobalLock(h_text)
-    ctypes.memmove(p_text, encoded, len(encoded))
-    kernel32.GlobalUnlock(h_text)
-    user32.SetClipboardData(CF_UNICODETEXT, h_text)
+    # Add CF_HDROP (file drop list) → terminal pastes path, browsers ignore
+    hdrop_data = make_hdrop(filepath)
+    h_hdrop = kernel32.GlobalAlloc(0x0002, len(hdrop_data))
+    p_hdrop = kernel32.GlobalLock(h_hdrop)
+    ctypes.memmove(p_hdrop, hdrop_data, len(hdrop_data))
+    kernel32.GlobalUnlock(h_hdrop)
+    user32.SetClipboardData(CF_HDROP, h_hdrop)
 
     user32.CloseClipboard()
 

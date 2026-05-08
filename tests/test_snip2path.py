@@ -13,9 +13,11 @@ from snip2path import (
     save_image,
     image_hash,
     build_parser,
+    make_hdrop,
     IMAGE_EXTS,
     CF_BITMAP,
     CF_DIB,
+    CF_HDROP,
     CF_UNICODETEXT,
     CF_DIBV5,
     TERMINAL_PROCS,
@@ -34,6 +36,7 @@ class TestConstants(unittest.TestCase):
         self.assertEqual(CF_BITMAP, 2)
         self.assertEqual(CF_DIB, 8)
         self.assertEqual(CF_UNICODETEXT, 13)
+        self.assertEqual(CF_HDROP, 15)
         self.assertEqual(CF_DIBV5, 17)
 
     def test_image_extensions(self):
@@ -124,6 +127,24 @@ class TestCLI(unittest.TestCase):
         parser = build_parser()
         args = parser.parse_args(["--no-text"])
         self.assertTrue(args.no_text)
+
+
+class TestHDROPFormat(unittest.TestCase):
+    def test_make_hdrop_starts_with_dropfiles(self):
+        data = make_hdrop("C:/test/file.png")
+        # DROPFILES starts with pFiles=20 (little-endian)
+        self.assertEqual(data[0], 20)
+        self.assertEqual(data[1], 0)
+        self.assertEqual(data[2], 0)
+        self.assertEqual(data[3], 0)
+        # fWide=1 at offset 16
+        self.assertEqual(data[16], 1)
+
+    def test_make_hdrop_contains_filepath(self):
+        data = make_hdrop("C:/test/file.png")
+        # Path is encoded as UTF-16-LE after DROPFILES header (20 bytes)
+        path_part = data[20:].decode("utf-16-le").rstrip("\x00")
+        self.assertEqual(path_part, "C:/test/file.png")
 
 
 class TestForegroundDetection(unittest.TestCase):
