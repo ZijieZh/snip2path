@@ -113,6 +113,22 @@ pip install -e .
 
 ---
 
+## v1.1 新功能：智能前台检测
+
+监听模式现在会自动检测当前窗口类型：
+
+| 当前窗口 | 截图后 Ctrl+V 效果 |
+|----------|-------------------|
+| 终端（cmd/PowerShell/Git Bash/Code/Cursor） | 粘贴路径 |
+| 浏览器（Kimi/ChatGPT/豆包等） | 仅粘贴图片 |
+| 微信 / 钉钉 | 仅粘贴图片 |
+
+如果自动检测不准，可以手动指定：
+- `snip2path --watch --always-text` — 始终附带路径
+- `snip2path --watch --no-text` — 始终不动剪贴板
+
+---
+
 ## 常用命令速查
 
 | 命令 | 作用 |
@@ -121,6 +137,8 @@ pip install -e .
 | `snip2path --watch` | 启动监听模式 |
 | `snip2path -o D:\图片` | 改输出目录 |
 | `snip2path -p ss_` | 改文件名前缀 |
+| `snip2path --always-text` | 强制附带路径（不分场景） |
+| `snip2path --no-text` | 强制不修改剪贴板（只保存文件） |
 | `snip2path -v` | 查看版本 |
 | `snip2path -h` | 查看帮助 |
 | `git status` | 查看哪些文件改过了 |
