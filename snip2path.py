@@ -26,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 from PIL import Image, ImageGrab
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 DEFAULT_OUTPUT = Path.home() / "Pictures" / "Snip2Path"
 DEFAULT_PREFIX = "snip_"
 
@@ -133,6 +133,22 @@ def should_add_text() -> bool:
 
 def get_clipboard_seq() -> int:
     return user32.GetClipboardSequenceNumber()
+
+
+# ── Single-instance guard ────────────────────────────────────────────────
+_mutex_handle = None
+
+def acquire_instance_lock() -> bool:
+    """Try to acquire named mutex. Returns True if acquired, False if already running."""
+    global _mutex_handle
+    kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+    kernel32.CreateMutexW.restype = ctypes.c_void_p
+    kernel32.GetLastError.restype = ctypes.c_uint32
+    ERROR_ALREADY_EXISTS = 183
+
+    h = kernel32.CreateMutexW(None, False, "Global\\Snip2Path_Watch_Mutex")
+    _mutex_handle = h
+    return not (h and kernel32.GetLastError() == ERROR_ALREADY_EXISTS)
 
 
 # ── Clipboard read ───────────────────────────────────────────────────────
@@ -263,6 +279,11 @@ def once():
 
 # ── Watch mode ───────────────────────────────────────────────────────────
 def watch(silent=False):
+    if not acquire_instance_lock():
+        print("Snip2Path is already running in another window.")
+        print("Close the other window first, or use snip2path (once mode).")
+        sys.exit(1)
+
     if not silent:
         print("Snip2Path daemon started")
         print(f"  Output: {_output_dir}")
@@ -300,15 +321,16 @@ def watch(silent=False):
 
                 filepath = save_image(img_or_path, fmt)
 
+                proc_name = get_foreground_process_name()
                 if should_add_text():
                     raw = capture_raw_formats()
                     if raw:
                         set_clipboard_multiformat(raw, str(filepath))
                     if not silent:
-                        print(f"[{datetime.now():%H:%M:%S}] {filepath.name}  ← Ctrl+V paste path (terminal)")
+                        print(f"[{datetime.now():%H:%M:%S}] {filepath.name}  ← path (fg: {proc_name})")
                 else:
                     if not silent:
-                        print(f"[{datetime.now():%H:%M:%S}] {filepath.name}  saved (image only)")
+                        print(f"[{datetime.now():%H:%M:%S}] {filepath.name}  saved (fg: {proc_name})")
 
             last_seq = get_clipboard_seq()
     except KeyboardInterrupt:
