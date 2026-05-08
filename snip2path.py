@@ -26,14 +26,29 @@ from datetime import datetime
 from pathlib import Path
 from PIL import Image, ImageGrab
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 DEFAULT_OUTPUT = Path.home() / "Pictures" / "Snip2Path"
 DEFAULT_PREFIX = "snip_"
+
+# ── Terminal process names (foreground window detection) ──────────────────
+TERMINAL_PROCS = {
+    # Windows built-in
+    "cmd.exe", "powershell.exe", "pwsh.exe",
+    # Terminal emulators
+    "windowsterminal.exe", "bash.exe", "sh.exe",
+    "wsl.exe", "mintty.exe", "wezterm.exe",
+    "alacritty.exe", "conemu.exe", "tabby.exe",
+    "hyper.exe", "terminus.exe",
+    # IDE terminals
+    "code.exe", "cursor.exe", "windsurf.exe",
+    "claude.exe",
+}
 
 # ── Windows API ──────────────────────────────────────────────────────────
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
 gdi32 = ctypes.windll.gdi32
+psapi = ctypes.windll.psapi
 
 # 64-bit Windows: restype/argtypes required to prevent pointer truncation
 kernel32.GlobalAlloc.argtypes = [ctypes.c_uint, ctypes.c_size_t]
@@ -62,6 +77,17 @@ user32.GetClipboardSequenceNumber.restype = ctypes.c_uint32
 user32.CopyImage.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_int, ctypes.c_uint]
 user32.CopyImage.restype = ctypes.c_void_p
 
+# Foreground window detection
+user32.GetForegroundWindow.restype = ctypes.c_void_p
+user32.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
+user32.GetWindowThreadProcessId.restype = ctypes.c_uint32
+kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_bool, ctypes.c_uint32]
+kernel32.OpenProcess.restype = ctypes.c_void_p
+kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+kernel32.CloseHandle.restype = ctypes.c_bool
+psapi.GetModuleBaseNameW.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_uint32]
+psapi.GetModuleBaseNameW.restype = ctypes.c_uint32
+
 CF_BITMAP = 2
 CF_DIB = 8
 CF_UNICODETEXT = 13
@@ -72,6 +98,37 @@ IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff"}
 # ── Global state (set by CLI args) ───────────────────────────────────────
 _output_dir = DEFAULT_OUTPUT
 _prefix = DEFAULT_PREFIX
+_always_text = False
+_no_text = False
+
+
+def get_foreground_process_name() -> str:
+    """Return lowercase process name of the foreground window, or empty string."""
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return ""
+    pid = ctypes.c_uint32()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    if not pid.value:
+        return ""
+    # PROCESS_QUERY_INFORMATION | PROCESS_VM_READ
+    h_proc = kernel32.OpenProcess(0x0400 | 0x0010, False, pid.value)
+    if not h_proc:
+        return ""
+    buf = ctypes.create_unicode_buffer(260)
+    psapi.GetModuleBaseNameW(h_proc, None, buf, 260)
+    kernel32.CloseHandle(h_proc)
+    return buf.value.lower()
+
+
+def should_add_text() -> bool:
+    """Decide whether to append text path to clipboard based on foreground window."""
+    if _always_text:
+        return True
+    if _no_text:
+        return False
+    proc = get_foreground_process_name()
+    return proc in TERMINAL_PROCS
 
 
 def get_clipboard_seq() -> int:
@@ -195,10 +252,13 @@ def once():
         filepath = save_image(img_or_path, fmt)
         print(f"Saved: {filepath}")
 
-    raw = capture_raw_formats()
-    if raw:
-        set_clipboard_multiformat(raw, str(filepath))
-    print("(Ctrl+V in terminal → path | Ctrl+V in chat app → image)")
+    if should_add_text():
+        raw = capture_raw_formats()
+        if raw:
+            set_clipboard_multiformat(raw, str(filepath))
+        print("(Ctrl+V in terminal → path | Ctrl+V in chat app → image)")
+    else:
+        print("(image saved, clipboard unchanged — not in terminal)")
 
 
 # ── Watch mode ───────────────────────────────────────────────────────────
@@ -206,7 +266,7 @@ def watch(silent=False):
     if not silent:
         print("Snip2Path daemon started")
         print(f"  Output: {_output_dir}")
-        print("  Ctrl+V in terminal → path | Ctrl+V in chat app → image")
+        print(f"  Mode:  {'always-text' if _always_text else 'no-text' if _no_text else 'auto-detect'}")
         print("  (Close this window to stop)")
         print("-" * 40)
 
@@ -239,12 +299,16 @@ def watch(silent=False):
                 last_hash = h
 
                 filepath = save_image(img_or_path, fmt)
-                raw = capture_raw_formats()
-                if raw:
-                    set_clipboard_multiformat(raw, str(filepath))
 
-                if not silent:
-                    print(f"[{datetime.now():%H:%M:%S}] {filepath.name}  ← ready, Ctrl+V to paste")
+                if should_add_text():
+                    raw = capture_raw_formats()
+                    if raw:
+                        set_clipboard_multiformat(raw, str(filepath))
+                    if not silent:
+                        print(f"[{datetime.now():%H:%M:%S}] {filepath.name}  ← Ctrl+V paste path (terminal)")
+                else:
+                    if not silent:
+                        print(f"[{datetime.now():%H:%M:%S}] {filepath.name}  saved (image only)")
 
             last_seq = get_clipboard_seq()
     except KeyboardInterrupt:
@@ -266,6 +330,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help=f"Output directory for saved images (default: {DEFAULT_OUTPUT})")
     p.add_argument("-p", "--prefix", type=str, default=DEFAULT_PREFIX,
                    help=f"Filename prefix (default: {DEFAULT_PREFIX})")
+    p.add_argument("--always-text", action="store_true",
+                   help="Always append text path to clipboard (ignore window detection)")
+    p.add_argument("--no-text", action="store_true",
+                   help="Never modify clipboard (save image only)")
     p.add_argument("-v", "--version", action="version", version=f"snip2path {VERSION}")
     return p
 
@@ -274,9 +342,11 @@ def main():
     parser = build_parser()
     args = parser.parse_args()
 
-    global _output_dir, _prefix
+    global _output_dir, _prefix, _always_text, _no_text
     _output_dir = Path(args.output_dir)
     _prefix = args.prefix
+    _always_text = args.always_text
+    _no_text = args.no_text
 
     if args.watch:
         watch(silent=args.silent)

@@ -18,6 +18,9 @@ from snip2path import (
     CF_DIB,
     CF_UNICODETEXT,
     CF_DIBV5,
+    TERMINAL_PROCS,
+    get_foreground_process_name,
+    should_add_text,
 )
 from PIL import Image
 
@@ -42,7 +45,7 @@ class TestConstants(unittest.TestCase):
 class TestSaveImage(unittest.TestCase):
     def setUp(self):
         self.img = Image.new("RGB", (100, 50), color="red")
-        self.test_dir = Path("C:/AI/snip2path/tests/_test_output")
+        self.test_dir = Path(__file__).parent / "_test_output"
 
     def tearDown(self):
         import shutil
@@ -111,6 +114,43 @@ class TestCLI(unittest.TestCase):
         parser = build_parser()
         args = parser.parse_args(["-p", "ss_"])
         self.assertEqual(args.prefix, "ss_")
+
+    def test_parser_always_text(self):
+        parser = build_parser()
+        args = parser.parse_args(["--always-text"])
+        self.assertTrue(args.always_text)
+
+    def test_parser_no_text(self):
+        parser = build_parser()
+        args = parser.parse_args(["--no-text"])
+        self.assertTrue(args.no_text)
+
+
+class TestForegroundDetection(unittest.TestCase):
+    def test_get_process_name_returns_string(self):
+        proc = get_foreground_process_name()
+        self.assertIsInstance(proc, str)
+        # 至少应该检测到某些进程（我们正在运行终端）
+        self.assertTrue(len(proc) > 0)
+
+    def test_terminal_procs_contains_expected(self):
+        self.assertIn("cmd.exe", TERMINAL_PROCS)
+        self.assertIn("windowsterminal.exe", TERMINAL_PROCS)
+        self.assertIn("code.exe", TERMINAL_PROCS)
+
+    def test_should_add_text_with_flags(self):
+        import snip2path
+        # always-text
+        snip2path._always_text = True
+        snip2path._no_text = False
+        self.assertTrue(snip2path.should_add_text())
+        # no-text
+        snip2path._always_text = False
+        snip2path._no_text = True
+        self.assertFalse(snip2path.should_add_text())
+        # reset
+        snip2path._always_text = False
+        snip2path._no_text = False
 
 
 if __name__ == "__main__":
