@@ -20,9 +20,6 @@ from snip2path import (
     CF_HDROP,
     CF_UNICODETEXT,
     CF_DIBV5,
-    TERMINAL_PROCS,
-    get_foreground_process_name,
-    should_add_text,
 )
 from PIL import Image
 
@@ -65,7 +62,6 @@ class TestSaveImage(unittest.TestCase):
         self.assertIn("test_", filepath.name)
         self.assertEqual(filepath.suffix, ".png")
 
-        # Verify it's a valid image
         reloaded = Image.open(filepath)
         self.assertEqual(reloaded.size, (100, 50))
 
@@ -74,12 +70,10 @@ class TestSaveImage(unittest.TestCase):
         snip2path._output_dir = self.test_dir
         snip2path._prefix = "test_"
 
-        # Create RGBA image
         rgba_img = Image.new("RGBA", (50, 50), color=(255, 0, 0, 128))
         filepath = snip2path.save_image(rgba_img, "jpg")
         self.assertTrue(filepath.exists())
         self.assertEqual(filepath.suffix, ".jpg")
-        # Should have been converted to RGB
         reloaded = Image.open(filepath)
         self.assertEqual(reloaded.mode, "RGB")
 
@@ -102,6 +96,8 @@ class TestCLI(unittest.TestCase):
         args = parser.parse_args([])
         self.assertFalse(args.watch)
         self.assertFalse(args.silent)
+        self.assertFalse(args.with_text)
+        self.assertFalse(args.no_clipboard)
 
     def test_parser_watch_flag(self):
         parser = build_parser()
@@ -118,60 +114,30 @@ class TestCLI(unittest.TestCase):
         args = parser.parse_args(["-p", "ss_"])
         self.assertEqual(args.prefix, "ss_")
 
-    def test_parser_always_text(self):
+    def test_parser_with_text(self):
         parser = build_parser()
-        args = parser.parse_args(["--always-text"])
-        self.assertTrue(args.always_text)
+        args = parser.parse_args(["--with-text"])
+        self.assertTrue(args.with_text)
 
-    def test_parser_no_text(self):
+    def test_parser_no_clipboard(self):
         parser = build_parser()
-        args = parser.parse_args(["--no-text"])
-        self.assertTrue(args.no_text)
+        args = parser.parse_args(["--no-clipboard"])
+        self.assertTrue(args.no_clipboard)
 
 
 class TestHDROPFormat(unittest.TestCase):
     def test_make_hdrop_starts_with_dropfiles(self):
         data = make_hdrop("C:/test/file.png")
-        # DROPFILES starts with pFiles=20 (little-endian)
         self.assertEqual(data[0], 20)
         self.assertEqual(data[1], 0)
         self.assertEqual(data[2], 0)
         self.assertEqual(data[3], 0)
-        # fWide=1 at offset 16
         self.assertEqual(data[16], 1)
 
     def test_make_hdrop_contains_filepath(self):
         data = make_hdrop("C:/test/file.png")
-        # Path is encoded as UTF-16-LE after DROPFILES header (20 bytes)
         path_part = data[20:].decode("utf-16-le").rstrip("\x00")
         self.assertEqual(path_part, "C:/test/file.png")
-
-
-class TestForegroundDetection(unittest.TestCase):
-    def test_get_process_name_returns_string(self):
-        proc = get_foreground_process_name()
-        self.assertIsInstance(proc, str)
-        # 至少应该检测到某些进程（我们正在运行终端）
-        self.assertTrue(len(proc) > 0)
-
-    def test_terminal_procs_contains_expected(self):
-        self.assertIn("cmd.exe", TERMINAL_PROCS)
-        self.assertIn("windowsterminal.exe", TERMINAL_PROCS)
-        self.assertIn("code.exe", TERMINAL_PROCS)
-
-    def test_should_add_text_with_flags(self):
-        import snip2path
-        # always-text
-        snip2path._always_text = True
-        snip2path._no_text = False
-        self.assertTrue(snip2path.should_add_text())
-        # no-text
-        snip2path._always_text = False
-        snip2path._no_text = True
-        self.assertFalse(snip2path.should_add_text())
-        # reset
-        snip2path._always_text = False
-        snip2path._no_text = False
 
 
 if __name__ == "__main__":

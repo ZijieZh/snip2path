@@ -2,25 +2,24 @@
 """Snip2Path — Screenshot to clipboard path bridge for Windows
 
 After screenshot (Win+Shift+S):
-  Ctrl+V in terminal/cmd  → pastes image file path
-  Ctrl+V in browser (Kimi/ChatGPT) → image only (no path)
+  Ctrl+V in terminal/cmd    → pastes image file path
+  Ctrl+V in browser (Kimi)  → image only (no path)
   Ctrl+V in WeChat/DingTalk → image only
 
 How: Windows clipboard supports multiple formats simultaneously.
   - CF_DIB / CF_DIBV5 / CF_BITMAP → image (WeChat, DingTalk, browsers)
   - CF_HDROP (file drop list)      → file path (terminal reads, browser ignores)
-  - Foreground window auto-detection → only add path in terminal context
 
 Usage:
-  snip2path           # once: save current clipboard image + set multi-format
-  snip2path --watch   # daemon: monitor clipboard, auto-process new images
-  snip2path -o ~/Pictures/Screenshots  # custom output directory
-  snip2path -p ss_    # custom filename prefix
+  snip2path              # once: save current clipboard image + set multi-format
+  snip2path --watch      # daemon: monitor clipboard, auto-process new images
+  snip2path -o ~/Screenshots  # custom output directory
 """
 import sys
 import os
 import hashlib
 import ctypes
+import struct
 import time
 import argparse
 from io import BytesIO
@@ -28,29 +27,14 @@ from datetime import datetime
 from pathlib import Path
 from PIL import Image, ImageGrab
 
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 DEFAULT_OUTPUT = Path.home() / "Pictures" / "Snip2Path"
 DEFAULT_PREFIX = "snip_"
-
-# ── Terminal process names (foreground window detection) ──────────────────
-TERMINAL_PROCS = {
-    # Windows built-in
-    "cmd.exe", "powershell.exe", "pwsh.exe",
-    # Terminal emulators
-    "windowsterminal.exe", "bash.exe", "sh.exe",
-    "wsl.exe", "mintty.exe", "wezterm.exe",
-    "alacritty.exe", "conemu.exe", "tabby.exe",
-    "hyper.exe", "terminus.exe",
-    # IDE terminals
-    "code.exe", "cursor.exe", "windsurf.exe",
-    "claude.exe",
-}
 
 # ── Windows API ──────────────────────────────────────────────────────────
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
 gdi32 = ctypes.windll.gdi32
-psapi = ctypes.windll.psapi
 
 # 64-bit Windows: restype/argtypes required to prevent pointer truncation
 kernel32.GlobalAlloc.argtypes = [ctypes.c_uint, ctypes.c_size_t]
@@ -79,17 +63,6 @@ user32.GetClipboardSequenceNumber.restype = ctypes.c_uint32
 user32.CopyImage.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_int, ctypes.c_uint]
 user32.CopyImage.restype = ctypes.c_void_p
 
-# Foreground window detection
-user32.GetForegroundWindow.restype = ctypes.c_void_p
-user32.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
-user32.GetWindowThreadProcessId.restype = ctypes.c_uint32
-kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_bool, ctypes.c_uint32]
-kernel32.OpenProcess.restype = ctypes.c_void_p
-kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
-kernel32.CloseHandle.restype = ctypes.c_bool
-psapi.GetModuleBaseNameW.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_uint32]
-psapi.GetModuleBaseNameW.restype = ctypes.c_uint32
-
 CF_BITMAP = 2
 CF_DIB = 8
 CF_HDROP = 15
@@ -101,37 +74,8 @@ IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff"}
 # ── Global state (set by CLI args) ───────────────────────────────────────
 _output_dir = DEFAULT_OUTPUT
 _prefix = DEFAULT_PREFIX
-_always_text = False
-_no_text = False
-
-
-def get_foreground_process_name() -> str:
-    """Return lowercase process name of the foreground window, or empty string."""
-    hwnd = user32.GetForegroundWindow()
-    if not hwnd:
-        return ""
-    pid = ctypes.c_uint32()
-    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    if not pid.value:
-        return ""
-    # PROCESS_QUERY_INFORMATION | PROCESS_VM_READ
-    h_proc = kernel32.OpenProcess(0x0400 | 0x0010, False, pid.value)
-    if not h_proc:
-        return ""
-    buf = ctypes.create_unicode_buffer(260)
-    psapi.GetModuleBaseNameW(h_proc, None, buf, 260)
-    kernel32.CloseHandle(h_proc)
-    return buf.value.lower()
-
-
-def should_add_text() -> bool:
-    """Decide whether to append text path to clipboard based on foreground window."""
-    if _always_text:
-        return True
-    if _no_text:
-        return False
-    proc = get_foreground_process_name()
-    return proc in TERMINAL_PROCS
+_with_text = False    # Also add CF_UNICODETEXT for old terminals
+_no_clipboard = False # Save file only, don't touch clipboard
 
 
 def get_clipboard_seq() -> int:
@@ -142,13 +86,11 @@ def get_clipboard_seq() -> int:
 _mutex_handle = None
 
 def acquire_instance_lock() -> bool:
-    """Try to acquire named mutex. Returns True if acquired, False if already running."""
     global _mutex_handle
     kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
     kernel32.CreateMutexW.restype = ctypes.c_void_p
     kernel32.GetLastError.restype = ctypes.c_uint32
     ERROR_ALREADY_EXISTS = 183
-
     h = kernel32.CreateMutexW(None, False, "Global\\Snip2Path_Watch_Mutex")
     _mutex_handle = h
     return not (h and kernel32.GetLastError() == ERROR_ALREADY_EXISTS)
@@ -163,28 +105,21 @@ def get_clipboard_image():
         return None
     if img is None:
         return None
-    # File path list (e.g., copied from File Explorer)
     if isinstance(img, list):
         for f in img:
             p = Path(str(f))
             if p.suffix.lower() in IMAGE_EXTS:
                 return p, p.suffix[1:]
         return None
-    # Bitmap object (screenshot, browser image copy, etc.)
     if hasattr(img, "save"):
         return img, "png"
     return None
 
 
 def capture_raw_formats():
-    """Capture raw bitmap formats from clipboard before modification.
-
-    Returns {format_id: data_or_handle} for later restoration.
-    Must be called AFTER get_clipboard_image(), BEFORE clipboard modification.
-    """
+    """Capture raw bitmap formats from clipboard before modification."""
     raw = {}
     user32.OpenClipboard(0)
-
     for cf in (CF_DIB, CF_DIBV5):
         if user32.IsClipboardFormatAvailable(cf):
             h = user32.GetClipboardData(cf)
@@ -195,44 +130,34 @@ def capture_raw_formats():
                     data = ctypes.string_at(p, size)
                     kernel32.GlobalUnlock(h)
                     raw[cf] = data
-
     if user32.IsClipboardFormatAvailable(CF_BITMAP):
         h_bmp = user32.GetClipboardData(CF_BITMAP)
         if h_bmp:
             copy = user32.CopyImage(h_bmp, 0, 0, 0, 0)
             if copy:
                 raw[CF_BITMAP] = copy
-
     user32.CloseClipboard()
     return raw
 
 
-# ── CF_HDROP (file drop list) builder ────────────────────────────────────
+# ── CF_HDROP builder ─────────────────────────────────────────────────────
 def make_hdrop(filepath: str) -> bytes:
-    """Build CF_HDROP clipboard data for a single file path.
+    """Build CF_HDROP clipboard data for a single file.
 
     CF_HDROP is handled differently by each app:
-      - Windows Terminal / mintty → pastes file path as text
-      - Browsers (Kimi, ChatGPT) → IGNORED in text inputs (only reads image)
+      - Terminal / mintty → pastes file path as text
+      - Browsers (Kimi, ChatGPT) → IGNORED in text inputs
       - WeChat / DingTalk → reads CF_DIB/CF_BITMAP, ignores CF_HDROP
     """
-    import struct
     path_wide = filepath + "\x00"
     file_list = path_wide.encode("utf-16-le") + b"\x00\x00"
-
-    # DROPFILES: pFiles(4) + pt(8) + fNC(4) + fWide(4) = 20 bytes
-    dropfiles = struct.pack("<Iiiii", 20, 0, 0, 0, 1)  # fWide=1 (Unicode)
+    dropfiles = struct.pack("<Iiiii", 20, 0, 0, 0, 1)  # fWide=1
     return dropfiles + file_list
 
 
 # ── Clipboard multi-format write ─────────────────────────────────────────
-def set_clipboard_multiformat(raw_formats: dict, filepath: str):
-    """Write bitmap formats + CF_HDROP to clipboard.
-
-    Terminal reads CF_HDROP → pastes file path as text.
-    Browsers ignore CF_HDROP in text inputs → image only.
-    WeChat/DingTalk reads CF_DIB/CF_BITMAP → image.
-    """
+def set_clipboard_multiformat(raw_formats: dict, filepath: str, with_text: bool = False):
+    """Write bitmap formats + CF_HDROP (+ optional CF_UNICODETEXT) to clipboard."""
     user32.OpenClipboard(0)
     user32.EmptyClipboard()
 
@@ -247,13 +172,22 @@ def set_clipboard_multiformat(raw_formats: dict, filepath: str):
             kernel32.GlobalUnlock(h)
             user32.SetClipboardData(cf, h)
 
-    # Add CF_HDROP (file drop list) → terminal pastes path, browsers ignore
+    # CF_HDROP → terminal pastes path, browsers ignore
     hdrop_data = make_hdrop(filepath)
     h_hdrop = kernel32.GlobalAlloc(0x0002, len(hdrop_data))
     p_hdrop = kernel32.GlobalLock(h_hdrop)
     ctypes.memmove(p_hdrop, hdrop_data, len(hdrop_data))
     kernel32.GlobalUnlock(h_hdrop)
     user32.SetClipboardData(CF_HDROP, h_hdrop)
+
+    # Optional CF_UNICODETEXT for old terminals that don't handle CF_HDROP
+    if with_text:
+        encoded = filepath.encode("utf-16-le") + b"\x00\x00"
+        h_text = kernel32.GlobalAlloc(0x0002, len(encoded))
+        p_text = kernel32.GlobalLock(h_text)
+        ctypes.memmove(p_text, encoded, len(encoded))
+        kernel32.GlobalUnlock(h_text)
+        user32.SetClipboardData(CF_UNICODETEXT, h_text)
 
     user32.CloseClipboard()
 
@@ -290,13 +224,13 @@ def once():
         filepath = save_image(img_or_path, fmt)
         print(f"Saved: {filepath}")
 
-    if should_add_text():
+    if _no_clipboard:
+        print("(saved only, clipboard unchanged)")
+    else:
         raw = capture_raw_formats()
         if raw:
-            set_clipboard_multiformat(raw, str(filepath))
-        print("(Ctrl+V in terminal → path | Ctrl+V in chat app → image)")
-    else:
-        print("(image saved, clipboard unchanged — not in terminal)")
+            set_clipboard_multiformat(raw, str(filepath), with_text=_with_text)
+        print("(Ctrl+V in terminal → path | Ctrl+V elsewhere → image only)")
 
 
 # ── Watch mode ───────────────────────────────────────────────────────────
@@ -309,7 +243,9 @@ def watch(silent=False):
     if not silent:
         print("Snip2Path daemon started")
         print(f"  Output: {_output_dir}")
-        print(f"  Mode:  {'always-text' if _always_text else 'no-text' if _no_text else 'auto-detect'}")
+        print(f"  Mode:  no-clipboard" if _no_clipboard else
+              f"  Mode:  path+text" if _with_text else
+              f"  Mode:  path (CF_HDROP)")
         print("  (Close this window to stop)")
         print("-" * 40)
 
@@ -343,16 +279,16 @@ def watch(silent=False):
 
                 filepath = save_image(img_or_path, fmt)
 
-                proc_name = get_foreground_process_name()
-                if should_add_text():
+                if _no_clipboard:
+                    if not silent:
+                        print(f"[{datetime.now():%H:%M:%S}] {filepath.name}  saved")
+                else:
                     raw = capture_raw_formats()
                     if raw:
-                        set_clipboard_multiformat(raw, str(filepath))
+                        set_clipboard_multiformat(raw, str(filepath), with_text=_with_text)
                     if not silent:
-                        print(f"[{datetime.now():%H:%M:%S}] {filepath.name}  ← path (fg: {proc_name})")
-                else:
-                    if not silent:
-                        print(f"[{datetime.now():%H:%M:%S}] {filepath.name}  saved (fg: {proc_name})")
+                        mode = "path+text" if _with_text else "path"
+                        print(f"[{datetime.now():%H:%M:%S}] {filepath.name}  ← {mode}")
 
             last_seq = get_clipboard_seq()
     except KeyboardInterrupt:
@@ -374,10 +310,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help=f"Output directory for saved images (default: {DEFAULT_OUTPUT})")
     p.add_argument("-p", "--prefix", type=str, default=DEFAULT_PREFIX,
                    help=f"Filename prefix (default: {DEFAULT_PREFIX})")
-    p.add_argument("--always-text", action="store_true",
-                   help="Always append text path to clipboard (ignore window detection)")
-    p.add_argument("--no-text", action="store_true",
-                   help="Never modify clipboard (save image only)")
+    p.add_argument("--with-text", action="store_true",
+                   help="Also add CF_UNICODETEXT (old terminals that don't support CF_HDROP)")
+    p.add_argument("--no-clipboard", action="store_true",
+                   help="Save image only, don't modify clipboard at all")
     p.add_argument("-v", "--version", action="version", version=f"snip2path {VERSION}")
     return p
 
@@ -386,11 +322,11 @@ def main():
     parser = build_parser()
     args = parser.parse_args()
 
-    global _output_dir, _prefix, _always_text, _no_text
+    global _output_dir, _prefix, _with_text, _no_clipboard
     _output_dir = Path(args.output_dir)
     _prefix = args.prefix
-    _always_text = args.always_text
-    _no_text = args.no_text
+    _with_text = args.with_text
+    _no_clipboard = args.no_clipboard
 
     if args.watch:
         watch(silent=args.silent)
