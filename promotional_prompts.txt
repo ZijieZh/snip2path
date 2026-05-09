@@ -1,0 +1,95 @@
+Snip2Path 宣传海报 Prompt（三款风格）
+
+═══════════════════════════════════════════════════════════
+A — 科技极简风（适合 GitHub README 头图）
+═══════════════════════════════════════════════════════════
+
+A dark, sleek tech poster for an open-source developer tool called "Snip2Path".
+Style: cyberpunk-minimal, dark navy background (#0a0e17), neon accent lines in
+cyan (#00e5ff) and electric purple (#b347ea).
+
+Central composition:
+- A glowing neon keyboard key "Ctrl+V" at center, radiating cyan light beams
+  that split into three parallel streams
+- The three streams lead to three app icons below:
+  Terminal window (cyan) labeled "Path",
+  Chat bubble (purple) labeled "Image",
+  Browser window (cyan) labeled "Image"
+- Above the key, a stylized screenshot frame with a dashed crop border, glowing
+  faintly in cyan
+
+Typography:
+- Title "Snip2Path" in large bold monospace font, top center, neon cyan with
+  subtle purple glow behind
+- Subtitle "Screenshot. Ctrl+V. Done." in smaller monospace, below title
+- Bottom small text "github.com/ZijieZh/snip2path" in muted gray
+
+Atmosphere: clean, minimal, high-tech, no clutter, plenty of negative space,
+4K quality, digital art, ultra detailed, suitable for a GitHub project banner.
+
+Aspect ratio: 16:9
+
+═══════════════════════════════════════════════════════════
+B — 抽象概念风（适合社交分享、项目卡片）
+═══════════════════════════════════════════════════════════
+
+An abstract conceptual poster for a clipboard tool "Snip2Path". Artistic style:
+surreal geometry, dark gradient background from deep indigo (#1a0533) to pure
+black, with volumetric light beams.
+
+Central metaphor:
+- A luminous crystal prism floating in darkness, representing the Windows Clipboard
+- A bright white beam (screenshot) enters the prism from the top-left
+- The prism refracts the beam into THREE distinct colored rays shooting out to
+  the right:
+  1. A sharp green beam hitting a terminal icon → turns into text characters
+  2. A warm orange beam hitting a chat bubble → turns into a picture icon
+  3. A soft blue beam hitting a globe icon → turns into a picture icon
+
+Surrounding elements:
+- Faint geometric wireframe circles orbiting the prism
+- Subtle particles/dust motes catching the light beams
+- Binary code subtly embedded in the background texture as a faint pattern
+
+No text on the image itself (pure visual), but composition leaves space for
+overlaying "Snip2Path" text later.
+
+Atmosphere: mysterious, elegant, conceptual, like a high-end tech magazine cover,
+8K, ray-traced lighting, volumetric, photorealistic glass material on the prism.
+
+Aspect ratio: 1:1 (square) or 3:4 (portrait poster)
+
+═══════════════════════════════════════════════════════════
+C — 产品展示风（适合 README 说明图、文档插图）
+═══════════════════════════════════════════════════════════
+
+A clean, modern infographic-style poster for the tool "Snip2Path". Style: flat
+design with subtle 3D depth, clean white/light-gray background (#f8f9fa), with
+accent colors: teal (#0ea5e9), emerald (#10b981), and warm amber (#f59e0b).
+
+Layout (top to bottom):
+
+Top section:
+- Bold title "Snip2Path" in clean sans-serif, teal color
+- Tagline in gray: "Intelligent clipboard bridge for Windows"
+
+Middle section — a three-column comparison:
+- Left column (Terminal): icon of a terminal window, below it "Path" with a file
+  path example, teal accent border
+- Center column (Chat Apps): icons of WeChat/DingTalk, below it "Image" with a
+  picture placeholder, emerald accent border
+- Right column (Browser): icon of a browser window, below it "Image" with a
+  picture placeholder, emerald accent border
+
+Flow arrows show a single "Screenshot" source at top branching into the three
+columns, with the label "One Clipboard, Smart Routing"
+
+Bottom section:
+- Key features as small icon+text cards:
+  "Zero Config" / "Auto-Detect" / "Open Source"
+- GitHub URL in small text
+
+Style reference: like a Notion-style clean product page, or a polished GitHub
+social preview image, highly legible, modern SaaS aesthetic.
+
+Aspect ratio: 16:9

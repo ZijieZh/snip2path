@@ -1,5 +1,9 @@
 # Snip2Path
 
+<p align="center">
+  <img src="assets/header.png" alt="Snip2Path" width="100%">
+</p>
+
 **截图后 Ctrl+V：终端粘贴路径，微信/钉钉粘贴图片。**
 
 [English](README.md) | [MIT License](LICENSE)

@@ -1,5 +1,9 @@
 # Snip2Path
 
+<p align="center">
+  <img src="assets/header.png" alt="Snip2Path" width="100%">
+</p>
+
 **Screenshot → Ctrl+V pastes image path in terminal, image in chat apps.**
 
 [中文文档](README_CN.md) | [MIT License](LICENSE)
