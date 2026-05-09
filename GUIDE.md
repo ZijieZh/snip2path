@@ -41,7 +41,7 @@
 打开终端（Git Bash），输入：
 
 ```bash
-cd C:/AI/snip2path
+cd C:/AI/exes/snip2path
 ```
 
 ### 第 2 步：提交修改
@@ -62,7 +62,7 @@ git push
 ### 完整示例
 
 ```bash
-cd C:/AI/snip2path
+cd C:/AI/exes/snip2path
 git add .
 git commit -m "v1.0.1: 增加自定义文件名后缀功能"
 git push
@@ -113,19 +113,19 @@ pip install -e .
 
 ---
 
-## v1.1 新功能：智能前台检测
+## v1.2 核心机制
 
-监听模式现在会自动检测当前窗口类型：
+Snip2Path 使用 CF_HDROP（文件拖放列表）格式写入剪贴板：
 
-| 当前窗口 | 截图后 Ctrl+V 效果 |
-|----------|-------------------|
-| 终端（cmd/PowerShell/Git Bash/Code/Cursor） | 粘贴路径 |
-| 浏览器（Kimi/ChatGPT/豆包等） | 仅粘贴图片 |
-| 微信 / 钉钉 | 仅粘贴图片 |
+| 粘贴位置 | 效果 | 原因 |
+|----------|------|------|
+| 终端（cmd/PowerShell/Git Bash/Code/Cursor） | 粘贴路径 | 终端读 CF_HDROP → 文件路径文本 |
+| 浏览器（Kimi/ChatGPT/豆包等） | 仅图片 | 浏览器文本输入框忽略 CF_HDROP |
+| 微信 / 钉钉 | 仅图片 | 读 CF_DIB 图片格式 |
 
-如果自动检测不准，可以手动指定：
-- `snip2path --watch --always-text` — 始终附带路径
-- `snip2path --watch --no-text` — 始终不动剪贴板
+如有特殊需求：
+- `snip2path --watch --with-text` — 同时附带 CF_UNICODETEXT（老终端兼容）
+- `snip2path --watch --no-clipboard` — 只保存不修改剪贴板
 
 ---
 
@@ -137,8 +137,8 @@ pip install -e .
 | `snip2path --watch` | 启动监听模式 |
 | `snip2path -o D:\图片` | 改输出目录 |
 | `snip2path -p ss_` | 改文件名前缀 |
-| `snip2path --always-text` | 强制附带路径（不分场景） |
-| `snip2path --no-text` | 强制不修改剪贴板（只保存文件） |
+| `snip2path --with-text` | 同时附带文本路径（老终端兼容） |
+| `snip2path --no-clipboard` | 只保存不修改剪贴板 |
 | `snip2path -v` | 查看版本 |
 | `snip2path -h` | 查看帮助 |
 | `git status` | 查看哪些文件改过了 |
@@ -155,20 +155,23 @@ snip2path/
 ├── pyproject.toml        ← 项目配置（版本号、依赖等）
 ├── README.md             ← 英文说明
 ├── README_CN.md          ← 中文说明
+├── GUIDE.md              ← 使用与维护指南（本文档）
 ├── LICENSE               ← MIT 协议
+├── assets/
+│   └── header.png        ← 宣传海报
 ├── scripts/
 │   ├── install.bat       ← 一键安装脚本
 │   └── start.bat         ← 启动监听脚本
 └── tests/
-    └── test_snip2path.py ← 测试代码，改完核心代码后跑一下
+    └── test_snip2path.py ← 测试代码（15个用例）
 ```
 
 **改完代码后跑测试**：
 ```bash
-cd C:/AI/snip2path
+cd C:/AI/exes/snip2path
 python tests/test_snip2path.py
 ```
-11 个测试全部 `ok` 才算通过。
+15 个测试全部 `ok` 才算通过。
 
 ---
 
