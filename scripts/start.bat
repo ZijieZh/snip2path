@@ -5,5 +5,5 @@ echo   Snip2Path Daemon
 echo   Screenshot ^> Ctrl+V ^> path in terminal / image in apps
 echo ================================
 echo.
-snip2path --watch
+start /min snip2path --watch
 pause

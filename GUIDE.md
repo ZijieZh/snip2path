@@ -13,7 +13,7 @@
 
 ### 启动监听
 
-双击桌面上的 **Snip2Path** 快捷方式，弹出一个命令行窗口，显示"Snip2Path daemon started"就表示在运行了。
+双击桌面上的 **Snip2Path Background** 快捷方式，程序在后台静默运行（无窗口弹出）。
 
 ### 粘贴图片到终端
 
@@ -28,7 +28,7 @@
 
 ### 关闭
 
-关掉那个命令行窗口就行。
+双击桌面上的 **Stop Snip2Path** 快捷方式即可关闭。
 
 ---
 
@@ -141,9 +141,11 @@ Snip2Path 使用 CF_HDROP（文件拖放列表）格式写入剪贴板：
 | `snip2path --no-clipboard` | 只保存不修改剪贴板 |
 | `snip2path -v` | 查看版本 |
 | `snip2path -h` | 查看帮助 |
-| `git status` | 查看哪些文件改过了 |
-| `git diff` | 查看具体改了什么 |
-| `git log --oneline` | 查看提交历史 |
+
+| 桌面快捷方式 | 作用 |
+|------|------|
+| **Snip2Path Background** | 启动后台监听（无窗口） |
+| **Stop Snip2Path** | 停止后台监听 |
 
 ---
 
@@ -160,10 +162,12 @@ snip2path/
 ├── assets/
 │   └── header.png        ← 宣传海报
 ├── scripts/
-│   ├── install.bat       ← 一键安装脚本
-│   └── start.bat         ← 启动监听脚本
+│   ├── install.bat          ← 一键安装脚本
+│   ├── start.bat            ← 启动监听脚本（最小化窗口）
+│   ├── start-background.bat ← 启动监听脚本（无窗口后台）
+│   └── stop.bat             ← 停止后台监听
 └── tests/
-    └── test_snip2path.py ← 测试代码（15个用例）
+    └── test_snip2path.py    ← 测试代码（21个用例）
 ```
 
 **改完代码后跑测试**：
@@ -171,7 +175,7 @@ snip2path/
 cd C:/AI/exes/snip2path
 python tests/test_snip2path.py
 ```
-15 个测试全部 `ok` 才算通过。
+21 个测试全部 `ok` 才算通过。
 
 ---
 

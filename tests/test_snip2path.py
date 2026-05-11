@@ -5,8 +5,11 @@ import os
 import unittest
 from pathlib import Path
 from io import BytesIO
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+import snip2path
 
 from snip2path import (
     VERSION,
@@ -62,8 +65,8 @@ class TestSaveImage(unittest.TestCase):
         self.assertIn("test_", filepath.name)
         self.assertEqual(filepath.suffix, ".png")
 
-        reloaded = Image.open(filepath)
-        self.assertEqual(reloaded.size, (100, 50))
+        with Image.open(filepath) as reloaded:
+            self.assertEqual(reloaded.size, (100, 50))
 
     def test_save_image_jpg_converts_rgba(self):
         import snip2path
@@ -74,8 +77,8 @@ class TestSaveImage(unittest.TestCase):
         filepath = snip2path.save_image(rgba_img, "jpg")
         self.assertTrue(filepath.exists())
         self.assertEqual(filepath.suffix, ".jpg")
-        reloaded = Image.open(filepath)
-        self.assertEqual(reloaded.mode, "RGB")
+        with Image.open(filepath) as reloaded:
+            self.assertEqual(reloaded.mode, "RGB")
 
 
 class TestImageHash(unittest.TestCase):
@@ -138,6 +141,72 @@ class TestHDROPFormat(unittest.TestCase):
         data = make_hdrop("C:/test/file.png")
         path_part = data[20:].decode("utf-16-le").rstrip("\x00")
         self.assertEqual(path_part, "C:/test/file.png")
+
+
+class TestClipboardReadMock(unittest.TestCase):
+    def test_has_clipboard_text_unicode(self):
+        with patch.object(snip2path.user32, "IsClipboardFormatAvailable",
+                          side_effect=lambda fmt: fmt == snip2path.CF_UNICODETEXT):
+            self.assertTrue(snip2path.has_clipboard_text())
+
+    def test_has_clipboard_text_no_text(self):
+        with patch.object(snip2path.user32, "IsClipboardFormatAvailable", return_value=False):
+            self.assertFalse(snip2path.has_clipboard_text())
+
+    def test_capture_raw_formats_empty(self):
+        with patch.object(snip2path.user32, "OpenClipboard"), \
+             patch.object(snip2path.user32, "CloseClipboard"), \
+             patch.object(snip2path.user32, "IsClipboardFormatAvailable", return_value=False):
+            result = snip2path.capture_raw_formats()
+            self.assertEqual(result, {})
+
+    def test_capture_raw_formats_dib(self):
+        fake_data = b"\x01\x02\x03\x04"
+        with patch.object(snip2path.user32, "OpenClipboard"), \
+             patch.object(snip2path.user32, "CloseClipboard"), \
+             patch.object(snip2path.user32, "IsClipboardFormatAvailable",
+                          side_effect=lambda fmt: fmt == snip2path.CF_DIB), \
+             patch.object(snip2path.user32, "GetClipboardData", return_value=0x1234), \
+             patch.object(snip2path.kernel32, "GlobalSize", return_value=4), \
+             patch.object(snip2path.kernel32, "GlobalLock", return_value=0xABCD), \
+             patch.object(snip2path.kernel32, "GlobalUnlock"), \
+             patch("snip2path.ctypes.string_at", return_value=fake_data):
+            result = snip2path.capture_raw_formats()
+            self.assertEqual(result, {snip2path.CF_DIB: fake_data})
+
+
+class TestClipboardWriteMock(unittest.TestCase):
+    def test_set_multiformat_sequence(self):
+        with patch.object(snip2path.user32, "OpenClipboard") as mock_open, \
+             patch.object(snip2path.user32, "EmptyClipboard") as mock_empty, \
+             patch.object(snip2path.user32, "SetClipboardData") as mock_set, \
+             patch.object(snip2path.user32, "CloseClipboard") as mock_close, \
+             patch.object(snip2path.kernel32, "GlobalAlloc", return_value=0x1000), \
+             patch.object(snip2path.kernel32, "GlobalLock", return_value=0x2000), \
+             patch.object(snip2path.kernel32, "GlobalUnlock"), \
+             patch("snip2path.ctypes.memmove"):
+            snip2path.set_clipboard_multiformat({}, "C:/test.png", with_text=False)
+
+            mock_open.assert_called_once_with(0)
+            mock_empty.assert_called_once()
+            mock_close.assert_called_once()
+            formats = [call.args[0] for call in mock_set.call_args_list]
+            self.assertIn(snip2path.CF_HDROP, formats)
+
+    def test_set_multiformat_with_text(self):
+        with patch.object(snip2path.user32, "OpenClipboard"), \
+             patch.object(snip2path.user32, "EmptyClipboard"), \
+             patch.object(snip2path.user32, "SetClipboardData") as mock_set, \
+             patch.object(snip2path.user32, "CloseClipboard"), \
+             patch.object(snip2path.kernel32, "GlobalAlloc", return_value=0x1000), \
+             patch.object(snip2path.kernel32, "GlobalLock", return_value=0x2000), \
+             patch.object(snip2path.kernel32, "GlobalUnlock"), \
+             patch("snip2path.ctypes.memmove"):
+            snip2path.set_clipboard_multiformat({}, "C:/test.png", with_text=True)
+
+            formats = [call.args[0] for call in mock_set.call_args_list]
+            self.assertIn(snip2path.CF_HDROP, formats)
+            self.assertIn(snip2path.CF_UNICODETEXT, formats)
 
 
 if __name__ == "__main__":
