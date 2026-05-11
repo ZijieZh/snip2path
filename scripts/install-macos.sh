@@ -17,10 +17,6 @@ echo "[OK] Python found"
 # Install dependencies
 echo "[*] Installing dependencies..."
 pip3 install Pillow "pyobjc-framework-Cocoa>=10.0" -q
-if [ $? -ne 0 ]; then
-    echo "[ERROR] Failed to install dependencies."
-    exit 1
-fi
 echo "[OK] Dependencies installed"
 
 # Install snip2path
@@ -28,10 +24,6 @@ echo "[*] Installing snip2path..."
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/.."
 pip3 install . -q
-if [ $? -ne 0 ]; then
-    echo "[ERROR] Failed to install snip2path."
-    exit 1
-fi
 echo "[OK] snip2path installed"
 
 # Create application scripts

@@ -85,7 +85,13 @@ if PLATFORM == "win32":
     def get_clipboard_seq():
         return user32.GetClipboardSequenceNumber()
 
-    def has_clipboard_text():
+    def has_clipboard_text() -> bool:
+        """Return True if clipboard contains text (CF_UNICODETEXT or CF_TEXT).
+
+        Excel and other apps often place BOTH text and a bitmap preview on the
+        clipboard. We must skip image processing when text is present so that
+        copying a table cell does not get converted into an image file.
+        """
         return bool(
             user32.IsClipboardFormatAvailable(CF_UNICODETEXT)
             or user32.IsClipboardFormatAvailable(CF_TEXT)
@@ -104,6 +110,7 @@ if PLATFORM == "win32":
         return not (h and kernel32.GetLastError() == ERROR_ALREADY_EXISTS)
 
     def get_clipboard_image():
+        """Return (PIL.Image, fmt), (Path, fmt), or None if no image on clipboard."""
         try:
             img = ImageGrab.grabclipboard()
         except Exception:
@@ -149,6 +156,7 @@ if PLATFORM == "win32":
         return dropfiles + file_list
 
     def set_clipboard_multiformat(raw_formats, filepath, with_text=False):
+        """Write bitmap formats + CF_HDROP (+ optional CF_UNICODETEXT) to clipboard."""
         user32.OpenClipboard(0)
         user32.EmptyClipboard()
         for cf, data in raw_formats.items():
@@ -183,6 +191,7 @@ elif PLATFORM == "darwin":
 
     _lock_fd = None
     _pb = None
+    _MACOS_IMAGE_UTIS = ("public.png", "public.tiff", "public.jpeg")
 
     def _get_pasteboard():
         global _pb
@@ -193,7 +202,12 @@ elif PLATFORM == "darwin":
     def get_clipboard_seq():
         return _get_pasteboard().changeCount()
 
-    def has_clipboard_text():
+    def has_clipboard_text() -> bool:
+        """Return True if clipboard contains text.
+
+        Excel and other apps often place BOTH text and a bitmap preview on the
+        clipboard. We must skip image processing when text is present.
+        """
         types = _get_pasteboard().types()
         if types is None:
             return False
@@ -216,28 +230,32 @@ elif PLATFORM == "darwin":
 
     def get_clipboard_image():
         pb = _get_pasteboard()
-        data = pb.dataForType_("public.png")
-        if data:
-            return _image_from_pb(data), "png"
-        for uti in ("public.tiff", "public.jpeg"):
+        for uti in _MACOS_IMAGE_UTIS:
             data = pb.dataForType_(uti)
             if data:
-                return _image_from_pb(data), uti.split(".")[-1]
+                ext = uti.split(".")[-1]
+                return _image_from_pb(data), ext
         return None
 
     def capture_raw_formats():
         pb = _get_pasteboard()
         raw = {}
-        for uti in ("public.png", "public.tiff", "public.jpeg"):
+        for uti in _MACOS_IMAGE_UTIS:
             data = pb.dataForType_(uti)
             if data:
                 raw[uti] = bytes(data)
         return raw
 
     def set_clipboard_multiformat(raw_formats, filepath, with_text=False):
+        """Write image data + text path to NSPasteboard.
+
+        On macOS, text path is always written because there is no CF_HDROP
+        equivalent; public.utf8-plain-text is the only way for terminals
+        to receive the file path.
+        """
         pb = _get_pasteboard()
         pb.clearContents()
-        for uti in ("public.png", "public.tiff", "public.jpeg"):
+        for uti in _MACOS_IMAGE_UTIS:
             if uti in raw_formats:
                 img_bytes = raw_formats[uti]
                 ns_data = NSData.dataWithBytes_length_(img_bytes, len(img_bytes))
