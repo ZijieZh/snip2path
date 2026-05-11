@@ -34,7 +34,9 @@ Now one `Ctrl+V` gives each app what it needs:
 pip install snip2path
 ```
 
-Or on Windows, double-click `scripts/install.bat`.
+Or use platform-specific installer:
+- **Windows**: double-click `scripts/install.bat`
+- **macOS**: run `bash scripts/install-macos.sh`
 
 ### Use
 
@@ -48,16 +50,22 @@ snip2path
 
 ### Workflow
 
+**Windows:**
 1. Start `snip2path --watch` (keep the window open)
 2. Take a screenshot (`Win+Shift+S`)
 3. Switch to your terminal → `Ctrl+V` → file path pasted
 4. Switch to WeChat → `Ctrl+V` → image pasted
 
+**macOS:**
+1. Start `snip2path --watch` (or `nohup snip2path --watch --silent &`)
+2. Take a screenshot (`Cmd+Ctrl+Shift+4`)
+3. Switch to your terminal → `Cmd+V` → file path pasted
+4. Switch to WeChat → `Cmd+V` → image pasted
+
 ## Requirements
 
-- **Windows** only (uses Win32 clipboard API)
-- **Python** 3.8+
-- **Pillow** ≥ 9.0
+- **Windows**: Python 3.8+, Pillow ≥ 9.0
+- **macOS**: Python 3.8+, Pillow ≥ 9.0, pyobjc-framework-Cocoa ≥ 10.0
 
 ## CLI Options
 

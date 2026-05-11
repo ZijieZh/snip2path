@@ -9,7 +9,10 @@ description = "Screenshot → Ctrl+V pastes image path in terminal, image in cha
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = ["Pillow>=9.0"]
+dependencies = [
+    "Pillow>=9.0",
+    "pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'",
+]
 authors = [
     {name = "Snip2Path contributors"}
 ]

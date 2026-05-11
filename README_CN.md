@@ -34,7 +34,9 @@ Snip2Path 后台监听剪贴板。当你截图后：
 pip install snip2path
 ```
 
-Windows 用户也可以双击 `scripts/install.bat` 一键安装。
+安装方式：
+- **Windows**：双击 `scripts/install.bat`
+- **macOS**：运行 `bash scripts/install-macos.sh`
 
 ### 使用
 
@@ -48,16 +50,22 @@ snip2path
 
 ### 工作流
 
+**Windows：**
 1. 启动 `snip2path --watch`（窗口保持打开）
 2. 截图（`Win+Shift+S`）
 3. 切到终端 → `Ctrl+V` → 粘贴出文件路径
 4. 切到微信 → `Ctrl+V` → 粘贴出图片
 
+**macOS：**
+1. 启动 `snip2path --watch`（或 `nohup snip2path --watch --silent &`）
+2. 截图（`Cmd+Ctrl+Shift+4`）
+3. 切到终端 → `Cmd+V` → 粘贴出文件路径
+4. 切到微信 → `Cmd+V` → 粘贴出图片
+
 ## 系统要求
 
-- **Windows** 专用（使用 Win32 剪贴板 API）
-- **Python** 3.8+
-- **Pillow** ≥ 9.0
+- **Windows**：Python 3.8+，Pillow ≥ 9.0
+- **macOS**：Python 3.8+，Pillow ≥ 9.0，pyobjc-framework-Cocoa ≥ 10.0
 
 ## 命令行参数
 

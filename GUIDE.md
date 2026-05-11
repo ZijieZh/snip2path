@@ -11,24 +11,39 @@
 
 ## 日常使用
 
-### 启动监听
+### Windows
 
-双击桌面上的 **Snip2Path Background** 快捷方式，程序在后台静默运行（无窗口弹出）。
+**启动监听：** 双击桌面上的 **Snip2Path Background** 快捷方式，程序在后台静默运行（无窗口弹出）。
 
-### 粘贴图片到终端
+**截图：** `Win+Shift+S`
 
-1. `Win+Shift+S` 截图
-2. 切回终端（Claude Code / Cursor / 命令行）
-3. `Ctrl+V` — 粘贴出图片文件路径
-4. 回车发送
+**粘贴：**
+- 终端 → `Ctrl+V` → 文件路径
+- 微信/钉钉 → `Ctrl+V` → 图片
 
-### 粘贴图片到微信/钉钉
+**关闭：** 双击桌面上的 **Stop Snip2Path** 快捷方式。
 
-直接 `Ctrl+V`，跟平时一样，图片正常粘贴。
+### macOS
 
-### 关闭
+**启动监听：**
+```bash
+snip2path --watch
+```
+或后台运行：
+```bash
+nohup snip2path --watch --silent > /dev/null 2>&1 &
+```
 
-双击桌面上的 **Stop Snip2Path** 快捷方式即可关闭。
+**截图：** `Cmd+Ctrl+Shift+4`（截图到剪贴板）
+
+**粘贴：**
+- 终端（iTerm2/Terminal.app） → `Cmd+V` → 文件路径
+- 微信/钉钉 → `Cmd+V` → 图片
+
+**关闭：**
+```bash
+pkill -f "snip2path --watch"
+```
 
 ---
 
@@ -104,27 +119,46 @@ cd snip2path
 
 ### 5. 安装依赖和项目
 
+**Windows：**
 ```bash
 pip install Pillow setuptools
 pip install -e .
+```
+
+**macOS：**
+```bash
+pip3 install Pillow "pyobjc-framework-Cocoa>=10.0"
+pip3 install -e .
 ```
 
 安装完成后，终端输入 `snip2path --version` 验证。
 
 ---
 
-## v1.2 核心机制
+## v1.3 核心机制
 
-Snip2Path 使用 CF_HDROP（文件拖放列表）格式写入剪贴板：
+### Windows
+
+使用 Win32 多格式剪贴板（CF_DIB + CF_HDROP）：
 
 | 粘贴位置 | 效果 | 原因 |
 |----------|------|------|
-| 终端（cmd/PowerShell/Git Bash/Code/Cursor） | 粘贴路径 | 终端读 CF_HDROP → 文件路径文本 |
-| 浏览器（Kimi/ChatGPT/豆包等） | 仅图片 | 浏览器文本输入框忽略 CF_HDROP |
+| 终端（cmd/PowerShell/Git Bash） | 粘贴路径 | 终端读 CF_HDROP → 文件路径文本 |
+| 浏览器（Kimi/ChatGPT） | 仅图片 | 浏览器文本输入框忽略 CF_HDROP |
 | 微信 / 钉钉 | 仅图片 | 读 CF_DIB 图片格式 |
 
+### macOS
+
+使用 NSPasteboard 多格式（public.png + public.utf8-plain-text）：
+
+| 粘贴位置 | 效果 | 原因 |
+|----------|------|------|
+| 终端（iTerm2/Terminal.app/Warp） | 粘贴路径 | 终端读 public.utf8-plain-text |
+| 浏览器（Kimi/ChatGPT） | 粘贴路径 | 无 CF_HDROP 等价物（已知限制） |
+| 微信 / 钉钉 | 仅图片 | 读 public.png 图片格式 |
+
 如有特殊需求：
-- `snip2path --watch --with-text` — 同时附带 CF_UNICODETEXT（老终端兼容）
+- `snip2path --watch --with-text` — 同时附带文本路径（老终端兼容）
 - `snip2path --watch --no-clipboard` — 只保存不修改剪贴板
 
 ---
@@ -162,10 +196,13 @@ snip2path/
 ├── assets/
 │   └── header.png        ← 宣传海报
 ├── scripts/
-│   ├── install.bat          ← 一键安装脚本
-│   ├── start.bat            ← 启动监听脚本（最小化窗口）
-│   ├── start-background.bat ← 启动监听脚本（无窗口后台）
-│   └── stop.bat             ← 停止后台监听
+│   ├── install.bat          ← Windows 一键安装
+│   ├── start.bat            ← Windows 启动（最小化窗口）
+│   ├── start-background.bat ← Windows 启动（无窗口后台）
+│   ├── stop.bat             ← Windows 停止
+│   ├── install-macos.sh     ← macOS 安装
+│   ├── start-macos.sh       ← macOS 启动（后台）
+│   └── stop-macos.sh        ← macOS 停止
 └── tests/
     └── test_snip2path.py    ← 测试代码（21个用例）
 ```
@@ -183,5 +220,5 @@ python tests/test_snip2path.py
 
 改了功能后记得更新版本号，有两处要改：
 
-1. **pyproject.toml**：`version = "1.0.0"` → `version = "1.0.1"`
-2. **snip2path.py**：`VERSION = "1.0.0"` → `VERSION = "1.0.1"`
+1. **pyproject.toml**：`version = "1.3.0"` → `version = "1.3.1"`
+2. **snip2path.py**：`VERSION = "1.3.0"` → `VERSION = "1.3.1"`

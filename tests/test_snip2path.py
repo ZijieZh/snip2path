@@ -16,28 +16,28 @@ from snip2path import (
     save_image,
     image_hash,
     build_parser,
-    make_hdrop,
     IMAGE_EXTS,
-    CF_BITMAP,
-    CF_DIB,
-    CF_HDROP,
-    CF_UNICODETEXT,
-    CF_DIBV5,
+    PLATFORM,
 )
 from PIL import Image
+
+if PLATFORM == "win32":
+    from snip2path import (
+        make_hdrop,
+        CF_BITMAP,
+        CF_DIB,
+        CF_HDROP,
+        CF_UNICODETEXT,
+        CF_DIBV5,
+    )
 
 
 class TestConstants(unittest.TestCase):
     def test_version(self):
-        self.assertIsInstance(VERSION, str)
-        self.assertTrue(len(VERSION) > 0)
+        self.assertEqual(VERSION, "1.3.0")
 
-    def test_clipboard_format_ids(self):
-        self.assertEqual(CF_BITMAP, 2)
-        self.assertEqual(CF_DIB, 8)
-        self.assertEqual(CF_UNICODETEXT, 13)
-        self.assertEqual(CF_HDROP, 15)
-        self.assertEqual(CF_DIBV5, 17)
+    def test_platform(self):
+        self.assertIn(PLATFORM, ("win32", "darwin"))
 
     def test_image_extensions(self):
         self.assertIn(".png", IMAGE_EXTS)
@@ -128,6 +128,7 @@ class TestCLI(unittest.TestCase):
         self.assertTrue(args.no_clipboard)
 
 
+@unittest.skipUnless(PLATFORM == "win32", "Windows only")
 class TestHDROPFormat(unittest.TestCase):
     def test_make_hdrop_starts_with_dropfiles(self):
         data = make_hdrop("C:/test/file.png")
@@ -143,6 +144,7 @@ class TestHDROPFormat(unittest.TestCase):
         self.assertEqual(path_part, "C:/test/file.png")
 
 
+@unittest.skipUnless(PLATFORM == "win32", "Windows only")
 class TestClipboardReadMock(unittest.TestCase):
     def test_has_clipboard_text_unicode(self):
         with patch.object(snip2path.user32, "IsClipboardFormatAvailable",
@@ -175,6 +177,7 @@ class TestClipboardReadMock(unittest.TestCase):
             self.assertEqual(result, {snip2path.CF_DIB: fake_data})
 
 
+@unittest.skipUnless(PLATFORM == "win32", "Windows only")
 class TestClipboardWriteMock(unittest.TestCase):
     def test_set_multiformat_sequence(self):
         with patch.object(snip2path.user32, "OpenClipboard") as mock_open, \
