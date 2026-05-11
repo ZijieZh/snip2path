@@ -63,6 +63,7 @@ user32.GetClipboardSequenceNumber.restype = ctypes.c_uint32
 user32.CopyImage.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_int, ctypes.c_uint]
 user32.CopyImage.restype = ctypes.c_void_p
 
+CF_TEXT = 1
 CF_BITMAP = 2
 CF_DIB = 8
 CF_HDROP = 15
@@ -80,6 +81,19 @@ _no_clipboard = False # Save file only, don't touch clipboard
 
 def get_clipboard_seq() -> int:
     return user32.GetClipboardSequenceNumber()
+
+
+def has_clipboard_text() -> bool:
+    """Return True if clipboard contains text (CF_UNICODETEXT or CF_TEXT).
+
+    Excel and other apps often place BOTH text and a bitmap preview on the
+    clipboard. We must skip image processing when text is present so that
+    copying a table cell does not get converted into an image file.
+    """
+    return bool(
+        user32.IsClipboardFormatAvailable(CF_UNICODETEXT)
+        or user32.IsClipboardFormatAvailable(CF_TEXT)
+    )
 
 
 # ── Single-instance guard ────────────────────────────────────────────────
@@ -211,6 +225,10 @@ def save_image(img, fmt="png") -> Path:
 
 # ── Once mode ────────────────────────────────────────────────────────────
 def once():
+    if has_clipboard_text():
+        print("Clipboard contains text, not an image. Skipping.")
+        sys.exit(0)
+
     result = get_clipboard_image()
     if result is None:
         print("No image on clipboard. Take a screenshot (Win+Shift+S) or copy an image first.")
@@ -257,6 +275,10 @@ def watch(silent=False):
             time.sleep(0.3)
             seq = get_clipboard_seq()
             if seq == last_seq:
+                continue
+
+            if has_clipboard_text():
+                last_seq = seq
                 continue
 
             result = get_clipboard_image()
