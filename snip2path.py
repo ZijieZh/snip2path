@@ -80,8 +80,6 @@ if PLATFORM == "win32":
     CF_HDROP = 15
     CF_DIBV5 = 17
 
-    IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff"}
-
     _mutex_handle = None
 
     def get_clipboard_seq():
@@ -183,8 +181,6 @@ elif PLATFORM == "darwin":
     from Foundation import NSData
     import fcntl
 
-    IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff"}
-
     _lock_fd = None
     _pb = None
 
@@ -215,18 +211,18 @@ elif PLATFORM == "darwin":
             _lock_fd = None
             return False
 
+    def _image_from_pb(data):
+        return Image.open(BytesIO(bytes(data)))
+
     def get_clipboard_image():
         pb = _get_pasteboard()
         data = pb.dataForType_("public.png")
         if data:
-            img = Image.open(BytesIO(bytes(data)))
-            return img, "png"
+            return _image_from_pb(data), "png"
         for uti in ("public.tiff", "public.jpeg"):
             data = pb.dataForType_(uti)
             if data:
-                ext = uti.split(".")[-1]
-                img = Image.open(BytesIO(bytes(data)))
-                return img, ext
+                return _image_from_pb(data), uti.split(".")[-1]
         return None
 
     def capture_raw_formats():
@@ -252,6 +248,8 @@ elif PLATFORM == "darwin":
 else:
     raise RuntimeError("Unsupported platform: " + PLATFORM)
 
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff"}
+
 # ═══════════════════════════════════════════════════════════════════════
 # Shared logic
 # ═══════════════════════════════════════════════════════════════════════
@@ -262,16 +260,16 @@ _with_text = False
 _no_clipboard = False
 
 
-def image_hash(img):
+def image_hash(img) -> str:
     buf = BytesIO()
     img.save(buf, format="PNG")
     return hashlib.md5(buf.getvalue()).hexdigest()
 
 
-def save_image(img, fmt="png"):
+def save_image(img, fmt="png") -> Path:
     _output_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
-    filepath = _output_dir / ("%s%s.%s" % (_prefix, ts, fmt))
+    filepath = _output_dir / f"{_prefix}{ts}.{fmt}"
     if fmt.lower() in ("jpg", "jpeg") and img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
     save_fmt = "JPEG" if fmt.lower() in ("jpg", "jpeg") else fmt.upper()
@@ -292,10 +290,10 @@ def once():
     img_or_path, fmt = result
     if isinstance(img_or_path, Path):
         filepath = img_or_path
-        print("Clipboard already has an image file: %s" % filepath)
+        print(f"Clipboard already has an image file: {filepath}")
     else:
         filepath = save_image(img_or_path, fmt)
-        print("Saved: %s" % filepath)
+        print(f"Saved: {filepath}")
 
     if _no_clipboard:
         print("(saved only, clipboard unchanged)")
@@ -303,7 +301,7 @@ def once():
         raw = capture_raw_formats()
         if raw:
             set_clipboard_multiformat(raw, str(filepath), with_text=_with_text)
-        print("(Ctrl+V in terminal -> path | Ctrl+V elsewhere -> image)")
+        print("(Ctrl+V in terminal → path | Ctrl+V elsewhere → image)")
 
 
 def watch(silent=False):
@@ -314,7 +312,7 @@ def watch(silent=False):
 
     if not silent:
         print("Snip2Path daemon started")
-        print("  Output: %s" % _output_dir)
+        print(f"  Output: {_output_dir}")
         if _no_clipboard:
             print("  Mode:  no-clipboard")
         elif _with_text:
@@ -348,8 +346,7 @@ def watch(silent=False):
             if isinstance(img_or_path, Path):
                 filepath = img_or_path
                 if not silent:
-                    print("[%s] file: %s" % (datetime.now().strftime("%H:%M:%S"),
-                                              filepath.name))
+                    print(f"[{datetime.now():%H:%M:%S}] file: {filepath.name}")
             else:
                 h = image_hash(img_or_path)
                 if h == last_hash:
@@ -361,8 +358,7 @@ def watch(silent=False):
 
                 if _no_clipboard:
                     if not silent:
-                        print("[%s] %s  saved" % (datetime.now().strftime("%H:%M:%S"),
-                                                   filepath.name))
+                        print(f"[{datetime.now():%H:%M:%S}] {filepath.name}  saved")
                 else:
                     raw = capture_raw_formats()
                     if raw:
@@ -370,8 +366,7 @@ def watch(silent=False):
                                                    with_text=_with_text)
                     if not silent:
                         mode = "path+text" if _with_text else "path"
-                        print("[%s] %s  <- %s" % (datetime.now().strftime("%H:%M:%S"),
-                                                   filepath.name, mode))
+                        print(f"[{datetime.now():%H:%M:%S}] {filepath.name}  ← {mode}")
 
             last_seq = get_clipboard_seq()
     except KeyboardInterrupt:
@@ -379,25 +374,25 @@ def watch(silent=False):
             print("\nStopped")
 
 
-def build_parser():
+def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="snip2path",
-        description="Screenshot -> Ctrl+V pastes path in terminal, image in chat apps",
+        description="Screenshot → Ctrl+V pastes path in terminal, image in chat apps",
     )
     p.add_argument("-w", "--watch", action="store_true",
                    help="Run in daemon mode: monitor clipboard and auto-process new images")
     p.add_argument("-s", "--silent", action="store_true",
                    help="Suppress output (for background daemon)")
     p.add_argument("-o", "--output-dir", type=str, default=str(DEFAULT_OUTPUT),
-                   help="Output directory for saved images (default: %s)" % DEFAULT_OUTPUT)
+                   help=f"Output directory for saved images (default: {DEFAULT_OUTPUT})")
     p.add_argument("-p", "--prefix", type=str, default=DEFAULT_PREFIX,
-                   help="Filename prefix (default: %s)" % DEFAULT_PREFIX)
+                   help=f"Filename prefix (default: {DEFAULT_PREFIX})")
     p.add_argument("--with-text", action="store_true",
                    help="Also add text path (old terminals / macOS)")
     p.add_argument("--no-clipboard", action="store_true",
                    help="Save image only, do not modify clipboard")
     p.add_argument("-v", "--version", action="version",
-                   version="snip2path %s" % VERSION)
+                   version=f"snip2path {VERSION}")
     return p
 
 
