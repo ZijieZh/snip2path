@@ -37,6 +37,7 @@ pip install snip2path
 安装方式：
 - **Windows**：双击 `scripts/install.bat`
 - **macOS**：运行 `bash scripts/install-macos.sh`
+- **Linux**：运行 `bash scripts/install-linux.sh`
 
 ### 使用
 
@@ -62,10 +63,17 @@ snip2path
 3. 切到终端 → `Cmd+V` → 粘贴出文件路径
 4. 切到微信 → `Cmd+V` → 粘贴出图片
 
+**Linux：**
+1. 启动 `snip2path --watch`（或 `nohup snip2path --watch --silent &`）
+2. 截图（取决于桌面环境，如 `gnome-screenshot` 或 `flameshot`）
+3. 切到终端 → `Ctrl+V` → 粘贴出文件路径
+4. 切到聊天软件 → `Ctrl+V` → 粘贴出图片
+
 ## 系统要求
 
 - **Windows**：Python 3.8+，Pillow ≥ 9.0
 - **macOS**：Python 3.8+，Pillow ≥ 9.0，pyobjc-framework-Cocoa ≥ 10.0
+- **Linux**：Python 3.8+，Pillow ≥ 9.0，xclip（X11）或 wl-clipboard（Wayland）
 
 ## 命令行参数
 
@@ -77,6 +85,10 @@ snip2path -p ss_          自定义文件名前缀
 snip2path -v              显示版本号
 snip2path -h              显示帮助
 ```
+
+## 平台差异
+
+**Linux 限制：** Linux 剪贴板（X11 / Wayland）无法同时保存图片和文本。Snip2Path 默认将图片恢复到剪贴板，聊天软件可粘贴图片。若需要在终端粘贴文件路径，使用 `snip2path --with-text`（仅路径）或 `snip2path --no-clipboard`（仅保存，不修改剪贴板）。
 
 ## 原理
 

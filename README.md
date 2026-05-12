@@ -37,6 +37,7 @@ pip install snip2path
 Or use platform-specific installer:
 - **Windows**: double-click `scripts/install.bat`
 - **macOS**: run `bash scripts/install-macos.sh`
+- **Linux**: run `bash scripts/install-linux.sh`
 
 ### Use
 
@@ -62,10 +63,17 @@ snip2path
 3. Switch to your terminal → `Cmd+V` → file path pasted
 4. Switch to WeChat → `Cmd+V` → image pasted
 
+**Linux:**
+1. Start `snip2path --watch` (or `nohup snip2path --watch --silent &`)
+2. Take a screenshot (tool depends on your DE, e.g. `gnome-screenshot` or `flameshot`)
+3. Switch to your terminal → `Ctrl+V` → file path pasted
+4. Switch to chat apps → `Ctrl+V` → image pasted
+
 ## Requirements
 
 - **Windows**: Python 3.8+, Pillow ≥ 9.0
 - **macOS**: Python 3.8+, Pillow ≥ 9.0, pyobjc-framework-Cocoa ≥ 10.0
+- **Linux**: Python 3.8+, Pillow ≥ 9.0, xclip (X11) or wl-clipboard (Wayland)
 
 ## CLI Options
 
@@ -77,6 +85,10 @@ snip2path -p ss_          Custom filename prefix
 snip2path -v              Show version
 snip2path -h              Show help
 ```
+
+## Platform Notes
+
+**Linux limitation:** The Linux clipboard (X11 / Wayland) cannot hold both image and text at the same time. Snip2Path restores the image to clipboard by default, so chat apps can paste images. If you need the file path in your terminal, use `snip2path --with-text` (path only) or `snip2path --no-clipboard` (save only, clipboard untouched).
 
 ## How It Works
 

@@ -34,10 +34,10 @@ if PLATFORM == "win32":
 
 class TestConstants(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(VERSION, "1.3.0")
+        self.assertEqual(VERSION, "1.4.0")
 
     def test_platform(self):
-        self.assertIn(PLATFORM, ("win32", "darwin"))
+        self.assertIn(PLATFORM, ("win32", "darwin", "linux"))
 
     def test_image_extensions(self):
         self.assertIn(".png", IMAGE_EXTS)

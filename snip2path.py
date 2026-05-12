@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 from PIL import Image
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 DEFAULT_OUTPUT = Path.home() / "Pictures" / "Snip2Path"
 DEFAULT_PREFIX = "snip_"
 
@@ -262,6 +262,171 @@ elif PLATFORM == "darwin":
                 pb.setData_forType_(ns_data, uti)
                 break
         pb.setString_forType_(filepath, "public.utf8-plain-text")
+
+elif PLATFORM.startswith("linux"):
+    import subprocess
+    import fcntl
+
+    _lock_fd = None
+    _LINUX_IMAGE_MIMES = (
+        ("image/png", "png"),
+        ("image/jpeg", "jpeg"),
+        ("image/jpg", "jpg"),
+        ("image/bmp", "bmp"),
+        ("image/x-bmp", "bmp"),
+        ("image/tiff", "tiff"),
+        ("image/webp", "webp"),
+    )
+
+    def _detect_backend():
+        if os.environ.get("WAYLAND_DISPLAY"):
+            return "wayland"
+        return "x11"
+
+    def _xclip_targets():
+        try:
+            result = subprocess.run(
+                ["xclip", "-selection", "clipboard", "-t", "TARGETS", "-o"],
+                capture_output=True, timeout=2
+            )
+            if result.returncode == 0:
+                return result.stdout.decode("utf-8", errors="ignore").strip().splitlines()
+        except Exception:
+            pass
+        return []
+
+    def _wl_types():
+        try:
+            result = subprocess.run(
+                ["wl-paste", "--list-types"],
+                capture_output=True, timeout=2
+            )
+            if result.returncode == 0:
+                return result.stdout.decode("utf-8", errors="ignore").strip().splitlines()
+        except Exception:
+            pass
+        return []
+
+    def get_clipboard_seq():
+        backend = _detect_backend()
+        targets = _xclip_targets() if backend == "x11" else _wl_types()
+        if targets:
+            return hashlib.md5("\n".join(targets).encode("utf-8")).hexdigest()
+        return str(int(time.time()))
+
+    def has_clipboard_text() -> bool:
+        backend = _detect_backend()
+        targets = _xclip_targets() if backend == "x11" else _wl_types()
+        text_types = {
+            "text/plain",
+            "STRING",
+            "UTF8_STRING",
+            "text/plain;charset=utf-8",
+        }
+        return bool(any(t in text_types for t in targets))
+
+    def acquire_instance_lock():
+        global _lock_fd
+        lock_file = Path(tempfile.gettempdir()) / "snip2path.lock"
+        _lock_fd = open(str(lock_file), "w")
+        try:
+            fcntl.flock(_lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except (OSError, IOError):
+            _lock_fd.close()
+            _lock_fd = None
+            return False
+
+    def get_clipboard_image():
+        backend = _detect_backend()
+        if backend == "x11":
+            targets = _xclip_targets()
+            for mime, ext in _LINUX_IMAGE_MIMES:
+                if mime in targets:
+                    try:
+                        result = subprocess.run(
+                            ["xclip", "-selection", "clipboard", "-t", mime, "-o"],
+                            capture_output=True, timeout=2
+                        )
+                        if result.returncode == 0 and result.stdout:
+                            return Image.open(BytesIO(result.stdout)), ext
+                    except Exception:
+                        pass
+        elif backend == "wayland":
+            for mime, ext in _LINUX_IMAGE_MIMES:
+                try:
+                    result = subprocess.run(
+                        ["wl-paste", "--type", mime],
+                        capture_output=True, timeout=2
+                    )
+                    if result.returncode == 0 and result.stdout:
+                        return Image.open(BytesIO(result.stdout)), ext
+                except Exception:
+                    pass
+        return None
+
+    def capture_raw_formats():
+        raw = {}
+        backend = _detect_backend()
+        if backend == "x11":
+            targets = _xclip_targets()
+            for mime, ext in _LINUX_IMAGE_MIMES:
+                if mime in targets:
+                    try:
+                        result = subprocess.run(
+                            ["xclip", "-selection", "clipboard", "-t", mime, "-o"],
+                            capture_output=True, timeout=2
+                        )
+                        if result.returncode == 0 and result.stdout:
+                            raw[mime] = result.stdout
+                            break
+                    except Exception:
+                        pass
+        elif backend == "wayland":
+            for mime, ext in _LINUX_IMAGE_MIMES:
+                try:
+                    result = subprocess.run(
+                        ["wl-paste", "--type", mime],
+                        capture_output=True, timeout=2
+                    )
+                    if result.returncode == 0 and result.stdout:
+                        raw[mime] = result.stdout
+                        break
+                except Exception:
+                    pass
+        return raw
+
+    def set_clipboard_multiformat(raw_formats, filepath, with_text=False):
+        backend = _detect_backend()
+        if with_text:
+            text = filepath.encode("utf-8")
+            if backend == "x11":
+                subprocess.run(
+                    ["xclip", "-selection", "clipboard",
+                     "-t", "text/plain;charset=utf-8", "-i"],
+                    input=text,
+                )
+            elif backend == "wayland":
+                subprocess.run(
+                    ["wl-copy", "--type", "text/plain;charset=utf-8"],
+                    input=text,
+                )
+        else:
+            for mime in ("image/png", "image/jpeg", "image/bmp"):
+                if mime in raw_formats:
+                    data = raw_formats[mime]
+                    if backend == "x11":
+                        subprocess.run(
+                            ["xclip", "-selection", "clipboard",
+                             "-t", mime, "-i"],
+                            input=data,
+                        )
+                    elif backend == "wayland":
+                        subprocess.run(
+                            ["wl-copy", "--type", mime],
+                            input=data,
+                        )
+                    break
 
 else:
     raise RuntimeError("Unsupported platform: " + PLATFORM)
