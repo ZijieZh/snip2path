@@ -45,6 +45,28 @@ nohup snip2path --watch --silent > /dev/null 2>&1 &
 pkill -f "snip2path --watch"
 ```
 
+### Linux
+
+**启动监听：**
+```bash
+snip2path --watch
+```
+或后台运行：
+```bash
+nohup snip2path --watch --silent > /dev/null 2>&1 &
+```
+
+**截图：** 取决于桌面环境（如 `gnome-screenshot`、`flameshot`、` spectacle`）
+
+**粘贴：**
+- 终端 → `Ctrl+V` → 文件路径（需加 `--with-text`）
+- 微信/钉钉 → `Ctrl+V` → 图片（默认模式）
+
+**关闭：**
+```bash
+pkill -f "snip2path --watch"
+```
+
 ---
 
 ## 修改代码后上传
@@ -131,11 +153,21 @@ pip3 install Pillow "pyobjc-framework-Cocoa>=10.0"
 pip3 install -e .
 ```
 
+**Linux：**
+```bash
+pip3 install Pillow
+pip3 install -e .
+```
+
+Linux 需要额外安装剪贴板工具：
+- X11：`sudo apt install xclip`（或对应发行版的包管理器）
+- Wayland：`sudo apt install wl-clipboard`
+
 安装完成后，终端输入 `snip2path --version` 验证。
 
 ---
 
-## v1.3 核心机制
+## v1.4 核心机制
 
 ### Windows
 
@@ -157,8 +189,19 @@ pip3 install -e .
 | 浏览器（Kimi/ChatGPT） | 粘贴路径 | 无 CF_HDROP 等价物（已知限制） |
 | 微信 / 钉钉 | 仅图片 | 读 public.png 图片格式 |
 
+### Linux
+
+使用 xclip（X11）或 wl-clipboard（Wayland）通过子进程读写剪贴板：
+
+| 粘贴位置 | 效果 | 原因 |
+|----------|------|------|
+| 终端 | 粘贴路径（需 `--with-text`） | Linux 剪贴板无法同时保存图片+文本 |
+| 聊天软件 | 仅图片（默认） | 恢复图片到剪贴板 |
+
+**Linux 限制说明：** X11 / Wayland 剪贴板架构不支持同时保存多种 MIME 类型。Snip2Path 默认恢复图片，因此聊天软件可以粘贴图片。若需要在终端粘贴路径，使用 `snip2path --with-text`。
+
 如有特殊需求：
-- `snip2path --watch --with-text` — 同时附带文本路径（老终端兼容）
+- `snip2path --watch --with-text` — 同时附带文本路径（老终端兼容 / Linux 终端必需）
 - `snip2path --watch --no-clipboard` — 只保存不修改剪贴板
 
 ---
@@ -171,7 +214,7 @@ pip3 install -e .
 | `snip2path --watch` | 启动监听模式 |
 | `snip2path -o D:\图片` | 改输出目录 |
 | `snip2path -p ss_` | 改文件名前缀 |
-| `snip2path --with-text` | 同时附带文本路径（老终端兼容） |
+| `snip2path --with-text` | 同时附带文本路径（老终端 / Linux 必需） |
 | `snip2path --no-clipboard` | 只保存不修改剪贴板 |
 | `snip2path -v` | 查看版本 |
 | `snip2path -h` | 查看帮助 |
@@ -189,8 +232,8 @@ pip3 install -e .
 snip2path/
 ├── snip2path.py          ← 核心代码，这是你要改的文件
 ├── pyproject.toml        ← 项目配置（版本号、依赖等）
-├── README.md             ← 英文说明
-├── README_CN.md          ← 中文说明
+├── README.md             ← 中文说明（GitHub 默认展示）
+├── README_EN.md          ← 英文说明
 ├── GUIDE.md              ← 使用与维护指南（本文档）
 ├── LICENSE               ← MIT 协议
 ├── assets/
@@ -202,7 +245,10 @@ snip2path/
 │   ├── stop.bat             ← Windows 停止
 │   ├── install-macos.sh     ← macOS 安装
 │   ├── start-macos.sh       ← macOS 启动（后台）
-│   └── stop-macos.sh        ← macOS 停止
+│   ├── stop-macos.sh        ← macOS 停止
+│   ├── install-linux.sh     ← Linux 安装
+│   ├── start-linux.sh       ← Linux 启动（后台）
+│   └── stop-linux.sh        ← Linux 停止
 └── tests/
     └── test_snip2path.py    ← 测试代码（21个用例）
 ```
@@ -220,5 +266,6 @@ python tests/test_snip2path.py
 
 改了功能后记得更新版本号，有两处要改：
 
-1. **pyproject.toml**：`version = "1.3.0"` → `version = "1.3.1"`
-2. **snip2path.py**：`VERSION = "1.3.0"` → `VERSION = "1.3.1"`
+1. **pyproject.toml**：`version = "1.4.0"`
+2. **snip2path.py**：`VERSION = "1.4.0"`
+3. **tests/test_snip2path.py**：`self.assertEqual(VERSION, "1.4.0")`
